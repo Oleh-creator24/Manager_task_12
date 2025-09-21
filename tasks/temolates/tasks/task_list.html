@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Task Manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .task { border: 1px solid #ccc; padding: 15px; margin: 10px; border-radius: 5px; }
+        .urgent { border-left: 5px solid red; }
+    </style>
+</head>
+<body>
+    <h1>Task Manager</h1>
+
+    <h2>Список задач ({{ tasks.count }})</h2>
+
+    {% if tasks %}
+        {% for task in tasks %}
+            <div class="task">
+                <h3>{{ task.title }}</h3>
+                <p><strong>Статус:</strong> {{ task.status.name }}</p>
+                <p><strong>Дедлайн:</strong> {{ task.deadline }}</p>
+                <p>{{ task.description|truncatewords:20 }}</p>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>Нет задач. <a href="/admin/tasks/task/add/">Создайте первую задачу в админке</a></p>
+    {% endif %}
+
+    <hr>
+    <p>
+        <a href="/admin/">Админка</a> |
+        <a href="/api/tasks/">API задач</a>
+    </p>
+</body>
+</html>
