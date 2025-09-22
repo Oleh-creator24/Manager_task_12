@@ -70,3 +70,9 @@ class SubTask(models.Model):
         return self.title
 
     short_title.short_description = "Title"
+
+class Category(models.Model):
+    name = models.CharField(max_length=255, db_index=True)
+
+    def __str__(self):
+        return self.name
