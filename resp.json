@@ -1,0 +1,26 @@
+﻿{
+    "subtasks":  [
+                     {
+                         "id":  1,
+                         "title":  "???? ?????????",
+                         "description":  "???????? read_only",
+                         "status":  {
+                                        "id":  5,
+                                        "name":  "To Do"
+                                    },
+                         "deadline":  "2024-12-15T12:00:00Z",
+                         "task":  {
+                                      "id":  14,
+                                      "title":  "???????? ?????? ??? ????????",
+                                      "description":  "??? ?????? ????? ????? ?????????",
+                                      "status":  {
+                                                     "id":  5,
+                                                     "name":  "To Do"
+                                                 },
+                                      "deadline":  "2024-12-31T23:59:59Z"
+                                  },
+                         "created_at":  "2025-09-22T16:27:02.458910Z"
+                     }
+                 ],
+    "task_id":  14
+}

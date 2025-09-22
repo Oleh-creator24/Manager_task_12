@@ -5,12 +5,11 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 import json
 import datetime
-from .models import Task, Status
+from .models import Task, Status, SubTask  # <— SubTask нужен
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
-from django.utils import timezone
-
-
+from .serializers import (TaskCreateSerializer, SubTaskCreateSerializer, SubTaskDetailSerializer,
+                          TaskDetailSerializer,)
 
 
 def task_list_html(request):
@@ -22,95 +21,138 @@ def task_list_html(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_create_task(request):
-    """API эндпоинт для создания задачи"""
+    """API эндпоинт для создания задачи — теперь через TaskCreateSerializer с проверкой deadline."""
     try:
         data = json.loads(request.body)
 
-        # Валидация обязательных полей
-        if not data.get('title'):
-            return JsonResponse({'error': 'Title is required'}, status=400)
+        serializer = TaskCreateSerializer(data=data)
+        if serializer.is_valid():
+            task = serializer.save()  # если status присылаешь строкой — лучше маппить во view/сериализаторе отдельно
+            return JsonResponse({
+                'message': 'Task created successfully',
+                'task': {
+                    'id': task.id,
+                    'title': task.title,
+                    'description': task.description,
+                    'status': task.status.name if getattr(task, "status", None) else None,
+                    'deadline': task.deadline.isoformat() if task.deadline else None
+                }
+            }, status=201, json_dumps_params={'ensure_ascii': False})
 
-        if not data.get('deadline'):
-            return JsonResponse({'error': 'Deadline is required'}, status=400)
-
-        # Упрощенная обработка даты - просто передаем строку, Django сам преобразует
-        deadline_str = data['deadline']
-
-        # Получаем или создаем статус
-        status_name = data.get('status', 'To Do')
-        status, created = Status.objects.get_or_create(name=status_name)
-
-        # Создаем задачу - Django сам преобразует строку в datetime
-        task = Task.objects.create(
-            title=data['title'],
-            description=data.get('description', ''),
-            status=status,
-            deadline=deadline_str  # передаем как строку
-        )
-
-        # Перезагружаем задачу из БД чтобы получить преобразованный datetime
-        task.refresh_from_db()
-
-        return JsonResponse({
-            'message': 'Task created successfully',
-            'task': {
-                'id': task.id,
-                'title': task.title,
-                'description': task.description,
-                'status': task.status.name,
-                'deadline': task.deadline.isoformat() if task.deadline else None
-            }
-        }, status=201)
+        # Ошибки валидации DRF (включая "Нельзя устанавливать дедлайн в прошлом.")
+        return JsonResponse({'error': serializer.errors}, status=400,
+                            json_dumps_params={'ensure_ascii': False})
 
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        return JsonResponse({'error': 'Invalid JSON'}, status=400,
+                            json_dumps_params={'ensure_ascii': False})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': str(e)}, status=500,
+                            json_dumps_params={'ensure_ascii': False})
+
+# def api_create_task(request):
+#     """API эндпоинт для создания задачи"""
+#     try:
+#         data = json.loads(request.body)
+#
+#         # Валидация обязательных полей
+#         if not data.get('title'):
+#             return JsonResponse({'error': 'Title is required'}, status=400,
+#                                 json_dumps_params={'ensure_ascii': False})
+#
+#         if not data.get('deadline'):
+#             return JsonResponse({'error': 'Deadline is required'}, status=400,
+#                                 json_dumps_params={'ensure_ascii': False})
+#
+#         # Упрощенная обработка даты - просто передаем строку, Django сам преобразует
+#         deadline_str = data['deadline']
+#
+#         # Получаем или создаем статус
+#         status_name = data.get('status', 'To Do')
+#         status, created = Status.objects.get_or_create(name=status_name)
+#
+#         # Создаем задачу - Django сам преобразует строку в datetime
+#         task = Task.objects.create(
+#             title=data['title'],
+#             description=data.get('description', ''),
+#             status=status,
+#             deadline=deadline_str  # передаем как строку
+#         )
+#
+#         # Перезагружаем задачу из БД чтобы получить преобразованный datetime
+#         task.refresh_from_db()
+#
+#         return JsonResponse({
+#             'message': 'Task created successfully',
+#             'task': {
+#                 'id': task.id,
+#                 'title': task.title,
+#                 'description': task.description,
+#                 'status': task.status.name,
+#                 'deadline': task.deadline.isoformat() if task.deadline else None
+#             }
+#         }, status=201, json_dumps_params={'ensure_ascii': False})
+#
+#     except json.JSONDecodeError:
+#         return JsonResponse({'error': 'Invalid JSON'}, status=400,
+#                             json_dumps_params={'ensure_ascii': False})
+#     except Exception as e:
+#         return JsonResponse({'error': str(e)}, status=500,
+#                             json_dumps_params={'ensure_ascii': False})
 
 
 @require_http_methods(["GET"])
-def api_task_list(request):
-    """API для получения списка задач"""
-    tasks = Task.objects.all()
+def api_task_detail(request, task_id):
+    """
+    Детали задачи: используем TaskDetailSerializer (задание 3).
+    """
+    task = get_object_or_404(Task, id=task_id)
+    serializer = TaskDetailSerializer(task)
+    return JsonResponse(serializer.data, json_dumps_params={'ensure_ascii': False})
 
-    tasks_data = []
-    for task in tasks:
-        tasks_data.append({
-            'id': task.id,
-            'title': task.title,
-            'description': task.description,
-            'status': task.status.name,
-            'deadline': task.deadline.isoformat() if task.deadline else None
-        })
+# def api_task_list(request):
+#     """API для получения списка задач"""
+#     tasks = Task.objects.all()
+#
+#     tasks_data = []
+#     for task in tasks:
+#         tasks_data.append({
+#             'id': task.id,
+#             'title': task.title,
+#             'description': task.description,
+#             'status': task.status.name,
+#             'deadline': task.deadline.isoformat() if task.deadline else None
+#         })
 
-    return JsonResponse({'tasks': tasks_data})
+    return JsonResponse({'tasks': tasks_data}, json_dumps_params={'ensure_ascii': False})
 
 
 @require_http_methods(["GET"])
 def api_task_detail(request, task_id):
     """API для получения деталей конкретной задачи по ID"""
     task = get_object_or_404(Task, id=task_id)
+    serializer = TaskDetailSerializer(task)
+    return JsonResponse(serializer.data, json_dumps_params={'ensure_ascii': False})
+    # task_data = {
+    #     'id': task.id,
+    #     'title': task.title,
+    #     'description': task.description,
+    #     'status': task.status.name,
+    #     'deadline': task.deadline.isoformat() if task.deadline else None,
+    #     'subtasks': []
+    # }
 
-    task_data = {
-        'id': task.id,
-        'title': task.title,
-        'description': task.description,
-        'status': task.status.name,
-        'deadline': task.deadline.isoformat() if task.deadline else None,
-        'subtasks': []
-    }
 
-    # Добавляем подзадачи если они есть
-    for subtask in task.subtasks.all():
-        task_data['subtasks'].append({
-            'id': subtask.id,
-            'title': subtask.title,
-            'description': subtask.description,
-            'status': subtask.status.name,
-            'deadline': subtask.deadline.isoformat() if subtask.deadline else None
-        })
-
-    return JsonResponse(task_data)
+    # for subtask in task.subtasks.all():
+    #     task_data['subtasks'].append({
+    #         'id': subtask.id,
+    #         'title': subtask.title,
+    #         'description': subtask.description,
+    #         'status': subtask.status.name,
+    #         'deadline': subtask.deadline.isoformat() if subtask.deadline else None
+    #     })
+    #
+    # return JsonResponse(task_data, json_dumps_params={'ensure_ascii': False})
 
 
 @require_http_methods(["GET"])
@@ -146,7 +188,7 @@ def api_task_list(request):
             'status': status_filter,
             'overdue': overdue
         }
-    })
+    }, json_dumps_params={'ensure_ascii': False})
 
 
 @require_http_methods(["GET"])
@@ -210,4 +252,67 @@ def api_task_stats(request):
         },
         'timestamp': timezone.now().isoformat(),
         'success': True
-    })
+    }, json_dumps_params={'ensure_ascii': False})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_create_subtask(request):
+    """API эндпоинт для создания подзадачи"""
+    try:
+        data = json.loads(request.body)
+
+        # Базовая валидация
+        if not data.get('title'):
+            return JsonResponse({'error': 'Title is required'}, status=400,
+                                json_dumps_params={'ensure_ascii': False})
+
+        if not data.get('deadline'):
+            return JsonResponse({'error': 'Deadline is required'}, status=400,
+                                json_dumps_params={'ensure_ascii': False})
+
+        # Валидируем и сохраняем через сериализатор (task_id и status_id обрабатываются внутри)
+        serializer = SubTaskCreateSerializer(data=data)
+        if serializer.is_valid():
+            subtask = serializer.save()
+            return JsonResponse({
+                'message': 'SubTask created successfully',
+                'subtask': {
+                    'id': subtask.id,
+                    'title': subtask.title,
+                    'description': subtask.description,
+                    'status': subtask.status.name,
+                    'deadline': subtask.deadline.isoformat() if subtask.deadline else None,
+                    'task_id': subtask.task.id,
+                    'created_at': subtask.created_at.isoformat() if subtask.created_at else None
+                }
+            }, status=201, json_dumps_params={'ensure_ascii': False})
+        else:
+            return JsonResponse({'error': serializer.errors}, status=400,
+                                json_dumps_params={'ensure_ascii': False})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400,
+                            json_dumps_params={'ensure_ascii': False})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500,
+                            json_dumps_params={'ensure_ascii': False})
+
+
+@require_http_methods(["GET"])
+def api_subtask_detail(request, subtask_id):
+    """API для получения деталей подзадачи по ID"""
+    subtask = get_object_or_404(SubTask, id=subtask_id)
+    serializer = SubTaskDetailSerializer(subtask)
+    return JsonResponse(serializer.data, json_dumps_params={'ensure_ascii': False})
+
+
+@require_http_methods(["GET"])
+def api_task_subtasks(request, task_id):
+    """API для получения всех подзадач конкретной задачи"""
+    task = get_object_or_404(Task, id=task_id)
+    subtasks = task.subtasks.all()
+
+    serializer = SubTaskDetailSerializer(subtasks, many=True)
+    return JsonResponse({'subtasks': serializer.data, 'task_id': task_id},
+                        json_dumps_params={'ensure_ascii': False})
